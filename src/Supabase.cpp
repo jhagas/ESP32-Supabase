@@ -1,4 +1,4 @@
-#include "ESP32_Supabase.h"
+#include "Supabase.h"
 
 void Supabase::_check_last_string()
 {
