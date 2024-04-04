@@ -125,6 +125,265 @@ Supabase &Supabase::update(String table)
   url_query += (table + "?");
   return *this;
 }
+
+
+int Supabase::upload(String bucket, String filename, String mime_type, uint8_t *buffer, uint32_t size)
+{
+  int httpCode = 0;
+
+  // Gets protocol out of hostname.
+  int index = hostname.indexOf("//");
+  String hostname_no_prot = hostname.substring(index + 2, hostname.length());
+
+  char hostname_char[hostname_no_prot.length() + 1];
+  hostname_no_prot.toCharArray(hostname_char, hostname_no_prot.length() + 1);
+
+  String finalPath = hostname + "/storage/v1/object/" + bucket + "/" + filename;
+
+  // Make a HTTP request and add HTTP headers
+  String boundary = "esp32-supabase-boundary";
+
+  // Request Main Header
+  String httpMainHeader = "POST " + finalPath + " HTTP/1.1\r\n";
+  httpMainHeader += "Host: " + hostname_no_prot + "\r\n";
+  httpMainHeader += "apikey: " + key + "\r\n";
+  httpMainHeader += "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n";
+
+  if (useAuth)
+  {
+    unsigned long t_now = millis();
+    if (t_now - loginTime >= authTimeout)
+    {
+      _login_process();
+    }
+
+    httpMainHeader += "Authorization: Bearer " + USER_TOKEN + "\r\n";
+  }
+
+  httpMainHeader += "User-Agent: ESP32/Supabase\r\n";
+  httpMainHeader += "Keep-Alive: 3600\r\n";
+  httpMainHeader += "Connection: keep-alive\r\n";
+
+  // request Content Header
+  String contentHeader = "--" + boundary + "\r\n";
+  contentHeader += "Content-Disposition: form-data; name=\"" + filename + "\"; filename=\"" + filename + "\"\r\n";
+  contentHeader += "Content-Type: " + mime_type + "\r\n\r\n";
+
+  // request Ending Header
+  String endingHeader = "\r\n--" + boundary + "--\r\n\r\n";
+
+  // content length
+  int contentLength = contentHeader.length() + endingHeader.length();
+
+  httpMainHeader += "Content-Length: " + String(contentLength + size) + "\n\n";
+
+  Serial.printf("Hostname: %s\n\r", hostname_char);
+
+  if (!client.connected())
+  {
+    // This needs further testing, might need to change to port 80.
+    client.connect(hostname_char, 443);
+
+    if (!client.connected())
+    {
+      return 0;
+    }
+  }
+
+  // send post header
+  size_t written = client.write((uint8_t *)httpMainHeader.c_str(), httpMainHeader.length());
+
+  Serial.printf("HTTP Request:\n\r%s\n\r", httpMainHeader.c_str());
+  Serial.printf("\n\r%s\n\r", contentHeader.c_str());
+  Serial.printf("\n\r(file of %lu bytes)\n\r", size);
+  Serial.printf("\n\r%s\n\r", endingHeader.c_str());
+
+  written = client.write((uint8_t *)contentHeader.c_str(), contentHeader.length());
+
+  const uint16_t chunkSize = 255;
+  uint32_t remainingBytes = size;
+
+  while (remainingBytes)
+  {
+    uint8_t bytesToRead = remainingBytes >= chunkSize ? chunkSize : remainingBytes;
+
+    client.write(buffer + (size - remainingBytes), bytesToRead);
+
+    remainingBytes -= bytesToRead;
+  }
+
+  written = client.write((uint8_t *)endingHeader.c_str(), endingHeader.length());
+
+  bool firstLine = true;
+
+  while (client.connected())
+  {
+    String line = client.readStringUntil('\n');
+    line.trim(); // remove \r
+
+    if (firstLine)
+    {
+      if (line == "")
+        continue;
+
+      int codePos = line.indexOf(' ') + 1;
+      httpCode = line.substring(codePos, line.indexOf(' ', codePos)).toInt();
+      firstLine = false;
+      Serial.printf("Return Code: %d\n\r", httpCode);
+    }
+
+    Serial.printf("%s\n\r", line.c_str());
+
+    if (line == "")
+    {
+      break;
+    }
+  }
+
+  String response = client.readStringUntil('\n');
+
+  Serial.printf("HTTP Response:\n\r");
+  Serial.printf("==========\n\r");
+  Serial.printf("%s\n\r", response.c_str());
+  Serial.printf("==========\n\r");
+  Serial.printf("HTTP End\n\r");
+
+  Serial.printf("Return Code: %d\n\r", httpCode);
+
+  return httpCode;
+}
+
+int Supabase::upload(String bucket, String filename, String mime_type, Stream *stream, uint64_t size)
+{
+  int httpCode = 0;
+
+  // Gets protocol out of hostname.
+  int index = hostname.indexOf("//");
+  String hostname_no_prot = hostname.substring(index + 2, hostname.length());
+
+  char hostname_char[hostname_no_prot.length() + 1];
+  hostname_no_prot.toCharArray(hostname_char, hostname_no_prot.length() + 1);
+
+  String finalPath = hostname + "/storage/v1/object/" + bucket + "/" + filename;
+
+  // Make a HTTP request and add HTTP headers
+  String boundary = "esp32-supabase-boundary";
+
+  // Request Main Header
+  String httpMainHeader = "POST " + finalPath + " HTTP/1.1\r\n";
+  httpMainHeader += "Host: " + hostname_no_prot + "\r\n";
+  httpMainHeader += "apikey: " + key + "\r\n";
+  httpMainHeader += "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n";
+
+  if (useAuth)
+  {
+    unsigned long t_now = millis();
+    if (t_now - loginTime >= authTimeout)
+    {
+      _login_process();
+    }
+
+    httpMainHeader += "Authorization: Bearer " + USER_TOKEN + "\r\n";
+  }
+
+  httpMainHeader += "User-Agent: ESP32/Supabase\r\n";
+  httpMainHeader += "Keep-Alive: 3600\r\n";
+  httpMainHeader += "Connection: keep-alive\r\n";
+
+  // request Content Header
+  String contentHeader = "--" + boundary + "\r\n";
+  contentHeader += "Content-Disposition: form-data; name=\"" + filename + "\"; filename=\"" + filename + "\"\r\n";
+  contentHeader += "Content-Type: " + mime_type + "\r\n\r\n";
+
+  // request Ending Header
+  String endingHeader = "\r\n--" + boundary + "--\r\n\r\n";
+
+  // content length
+  int contentLength = contentHeader.length() + endingHeader.length();
+
+  httpMainHeader += "Content-Length: " + String(contentLength + size) + "\n\n";
+
+  Serial.printf("Hostname: %s\n\r", hostname_char);
+
+  if (!client.connected())
+  {
+    // This needs further testing, might need to change to port 80.
+    client.connect(hostname_char, 443);
+
+    if (!client.connected())
+    {
+      return 0;
+    }
+  }
+
+  // send post header
+  size_t written = client.write((uint8_t *)httpMainHeader.c_str(), httpMainHeader.length());
+
+  Serial.printf("HTTP Request:\n\r%s\n\r", httpMainHeader.c_str());
+  Serial.printf("\n\r%s\n\r", contentHeader.c_str());
+  Serial.printf("\n\r(file of %llu bytes)\n\r", size);
+  Serial.printf("\n\r%s\n\r", endingHeader.c_str());
+
+  written = client.write((uint8_t *)contentHeader.c_str(), contentHeader.length());
+
+  const uint16_t chunkSize = 255;
+  uint64_t availableBytes = stream->available();
+
+
+  while (availableBytes)
+  {
+    uint8_t bytesToRead = availableBytes >= chunkSize ? chunkSize : availableBytes;
+
+    uint8_t buffer[bytesToRead];
+
+    uint8_t bytesRead = stream->readBytes(buffer, bytesToRead);
+
+    client.write(buffer, bytesRead);
+
+    availableBytes = stream->available();
+  }
+
+
+  written = client.write((uint8_t *)endingHeader.c_str(), endingHeader.length());
+
+  bool firstLine = true;
+
+  while (client.connected())
+  {
+    String line = client.readStringUntil('\n');
+    line.trim(); // remove \r
+
+    if (firstLine)
+    {
+      if(line == "") continue;
+
+      int codePos = line.indexOf(' ') + 1;
+      httpCode = line.substring(codePos, line.indexOf(' ', codePos)).toInt();
+      firstLine = false;
+      Serial.printf("Return Code: %d\n\r", httpCode);
+    }
+
+    Serial.printf("%s\n\r", line.c_str());
+
+    if (line == "")
+    {
+      break;
+    }
+  }
+
+  String response = client.readStringUntil('\n');
+
+  Serial.printf("HTTP Response:\n\r");
+  Serial.printf("==========\n\r");
+  Serial.printf("%s\n\r", response.c_str());
+  Serial.printf("==========\n\r");
+  Serial.printf("HTTP End\n\r");
+
+  Serial.printf("Return Code: %d\n\r", httpCode);
+
+  return httpCode;
+}
+
 // Supabase& Supabase::drop(String table){
 //   url_query += (table+"?");
 //   return *this;
@@ -340,7 +599,7 @@ int Supabase::login_phone(String phone_a, String password_a)
   return httpCode;
 }
 
-String Supabase::rpc(String func_name, String json_param = "")
+String Supabase::rpc(String func_name, String json_param)
   {
 
     int httpCode;
