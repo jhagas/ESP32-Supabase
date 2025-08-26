@@ -82,7 +82,7 @@ Supabase &Supabase::Supabase::from(String table)
   return *this;
 }
 
-int Supabase::insert(String table, String json, bool upsert)
+int Supabase::insert(String table, String json, bool upsert, bool return_minimal)
 {
   int httpCode;
   if (https.begin(client, hostname + "/rest/v1/" + table))
@@ -90,7 +90,13 @@ int Supabase::insert(String table, String json, bool upsert)
     https.addHeader("apikey", key);
     https.addHeader("Content-Type", "application/json");
 
-    String preferHeader = "return=representation";
+    String preferHeader;
+    if (return_minimal) {
+      preferHeader = "return=minimal";
+    } else {
+      preferHeader = "return=representation";
+    }
+
     if (upsert)
     {
       preferHeader += ",resolution=merge-duplicates";

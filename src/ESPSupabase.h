@@ -50,7 +50,7 @@ public:
 
   // membuat Query Builder
   Supabase &from(String table);
-  int insert(String table, String json, bool upsert);
+  int insert(String table, String json, bool upsert, bool return_minimal = false);
   Supabase &select(String colls);
   Supabase &update(String table);
   int upload(String bucket, String filename, String mime_type, Stream *stream, uint32_t size);
